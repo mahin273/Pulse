@@ -1,6 +1,8 @@
 package com.example.monitor
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.BatteryManager
 import android.app.ActivityManager
 import android.util.Log
@@ -62,10 +64,26 @@ object SystemMonitor {
         val currentMicroAmps = batteryManager?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: 0L
         val batteryCurrentMa = - (currentMicroAmps / 1000f) // negative is draining, positive is charging
         
-        // Estimate battery voltage & temp via scaling or reading battery properties if possible,
-        // we fallback to typical phone stats otherwise.
-        val batteryTemp = 36.5f + (Random.nextFloat() * 0.4f)
-        val batteryVoltageV = 3.82f + (Random.nextFloat() * 0.08f)
+        // Retrieve real battery temperature and voltage using the battery changed sticky intent.
+        // If unavailable, we fallback gracefully to typical simulated phone stats.
+        var batteryTemp = 36.5f + (Random.nextFloat() * 0.4f)
+        var batteryVoltageV = 3.82f + (Random.nextFloat() * 0.08f)
+        try {
+            val intentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            val batteryStatus = context.registerReceiver(null, intentFilter)
+            if (batteryStatus != null) {
+                val tempInt = batteryStatus.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+                if (tempInt > 0) {
+                    batteryTemp = tempInt / 10f
+                }
+                val voltInt = batteryStatus.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+                if (voltInt > 0) {
+                    batteryVoltageV = if (voltInt > 1000) voltInt / 1000f else voltInt.toFloat()
+                }
+            }
+        } catch (e: Exception) {
+            // Fallback to defaults already set above
+        }
         
         // Est. drain rate (V x A)
         val sessionDrainRateMaH = abs(batteryCurrentMa)
