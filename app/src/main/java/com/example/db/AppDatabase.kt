@@ -115,6 +115,9 @@ interface PulseDao {
     @Query("SELECT * FROM battery_logs ORDER BY timestamp DESC LIMIT 500")
     fun getBatteryLogs(): Flow<List<BatteryLog>>
 
+    @Query("SELECT * FROM battery_logs ORDER BY timestamp DESC LIMIT 500")
+    suspend fun getBatteryLogsList(): List<BatteryLog>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBatteryLog(log: BatteryLog)
 }

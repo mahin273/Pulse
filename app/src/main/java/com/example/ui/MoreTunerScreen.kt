@@ -1578,15 +1578,15 @@ fun MoreTunerScreen(
         // Section 13: Battery Wear Logging & Analytics
         item {
             val logs by viewModel.batteryLogs.collectAsState(initial = emptyList())
-            val healthEst = viewModel.getEstimatedHealthPercent(logs)
-            val cyclesEst = viewModel.getEstimatedCyclesCount(logs)
+            val batteryHealth by viewModel.batteryHealth.collectAsState()
+            val batteryCycles by viewModel.batteryCycles.collectAsState()
             var isBatteryExp by remember { mutableStateOf(false) }
 
             AdvancedCollapsibleCard(
                 title = "BATTERY DEGRADATION & CYCLES DIAGNOSTICS",
                 isExpanded = isBatteryExp,
                 onToggleExpand = { isBatteryExp = !isBatteryExp },
-                statusBadgeText = "HEALTH: $healthEst%",
+                statusBadgeText = "HEALTH: $batteryHealth%",
                 statusBadgeColor = Success
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1606,8 +1606,8 @@ fun MoreTunerScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("ESTIMATED HEALTH", color = TextSecondary, fontSize = 8.sp)
-                                Text("$healthEst%", color = Success, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                                Text("Wear: ${100 - healthEst}%", color = TextSecondary, fontSize = 8.sp)
+                                Text("$batteryHealth%", color = Success, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("Wear: ${100 - batteryHealth}%", color = TextSecondary, fontSize = 8.sp)
                             }
                         }
 
@@ -1621,7 +1621,7 @@ fun MoreTunerScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("CHARGE CYCLES", color = TextSecondary, fontSize = 8.sp)
-                                Text("$cyclesEst", color = Success, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("$batteryCycles", color = Success, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                 Text("Standard baseline", color = TextSecondary, fontSize = 8.sp)
                             }
                         }

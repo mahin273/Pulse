@@ -60,7 +60,7 @@ If no block is found or root writes are blocked by SELinux, the app intercepts t
 
 ---
 
-## 🛠️ Sandbox & Simulation Mode
+##  Sandbox & Simulation Mode
 Pulse runs beautifully even on **non-rooted** devices! When the app initializes, the [RootController](app/src/main/java/com/example/root/RootController.kt) tests for generic root access using a background thread. If root is missing:
 * The app automatically enables **Sandbox Mode**.
 * System command outputs and direct `/sys` paths writes are emulated using simulated state buffers.
@@ -68,7 +68,7 @@ Pulse runs beautifully even on **non-rooted** devices! When the app initializes,
 
 ---
 
-## 💻 Tech Stack & Architecture
+##  Tech Stack & Architecture
 * **Language**: Kotlin 1.9+
 * **UI toolkit**: Jetpack Compose (Declarative UI, Material 3)
 * **Local Database**: Room DB (SQLite) for profiles, scripts, and battery state history.
@@ -77,7 +77,7 @@ Pulse runs beautifully even on **non-rooted** devices! When the app initializes,
 
 ---
 
-## 🚀 Building and Verifying
+##  Building and Verifying
 
 ### Run Unit Tests
 ```powershell
