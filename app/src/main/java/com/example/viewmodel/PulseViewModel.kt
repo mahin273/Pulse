@@ -1669,7 +1669,7 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     if (foregroundApp == null) {
-                        if (Random.nextInt(100) < 15) {
+                        if (RootController.dryRunMode.value && Random.nextInt(100) < 15) {
                             val mockApps = listOf("com.google.android.youtube", "com.android.chrome", "com.whatsapp", "com.example.pulse")
                             foregroundApp = mockApps.random()
                         }
@@ -1728,26 +1728,43 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
                     val rawStats = ArrayList<Pair<String, Long>>()
 
                     val path = "/sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state"
-                     var readSuccess = false
-                     if (File(path).exists()) {
-                         val lines = File(path).readLines()
-                         lines.forEach { line ->
-                             val parts = line.split("\\s+".toRegex())
-                             if (parts.size >= 2) {
-                                 val freqKHz = parts[0].toLongOrNull()
-                                 val timeTicks = parts[1].toLongOrNull()
-                                 if (freqKHz != null && timeTicks != null) {
-                                     val freqMhz = freqKHz / 1000
-                                     val label = if (freqMhz >= 1000) "${String.format("%.1f", freqMhz / 1000f)} GHz" else "$freqMhz MHz"
-                                     rawStats.add(Pair(label, timeTicks))
-                                     totalTime += timeTicks
-                                 }
-                             }
-                         }
-                         if (rawStats.isNotEmpty()) {
-                             readSuccess = true
-                         }
-                     }
+                    var readSuccess = false
+                    
+                    val lines = mutableListOf<String>()
+                    try {
+                        val file = File(path)
+                        if (file.exists() && file.canRead()) {
+                            lines.addAll(file.readLines())
+                        }
+                    } catch (e: Exception) {
+                        // Ignore and fall back to root shell below
+                    }
+                    
+                    if (lines.isEmpty() && RootController.isRootGranted.value && !RootController.dryRunMode.value) {
+                        val result = RootController.execute("cat $path", requestRoot = true)
+                        if (result.exitCode == 0 && result.stdout.isNotEmpty()) {
+                            lines.addAll(result.stdout)
+                        }
+                    }
+
+                    if (lines.isNotEmpty()) {
+                        lines.forEach { line ->
+                            val parts = line.split("\\s+".toRegex())
+                            if (parts.size >= 2) {
+                                val freqKHz = parts[0].toLongOrNull()
+                                val timeTicks = parts[1].toLongOrNull()
+                                if (freqKHz != null && timeTicks != null) {
+                                    val freqMhz = freqKHz / 1000
+                                    val label = if (freqMhz >= 1000) "${String.format("%.1f", freqMhz / 1000f)} GHz" else "$freqMhz MHz"
+                                    rawStats.add(Pair(label, timeTicks))
+                                    totalTime += timeTicks
+                                }
+                            }
+                        }
+                        if (rawStats.isNotEmpty()) {
+                            readSuccess = true
+                        }
+                    }
 
                      if (!readSuccess) {
                          val frequencies = listOf("300 MHz", "800 MHz", "1.2 GHz", "1.6 GHz", "1.8 GHz", "2.0 GHz", "2.4 GHz", "Deep Sleep")
@@ -1844,23 +1861,38 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
                     val list = ArrayList<WakelockInfo>()
                     val path = "/sys/kernel/debug/wakeup_sources"
                     var readSuccess = false
-                    if (File(path).exists()) {
-                        val lines = File(path).readLines()
-                        if (lines.size > 1) {
-                            lines.drop(1).forEach { line ->
-                                val parts = line.split("\\s+".toRegex()).filter { it.isNotEmpty() }
-                                if (parts.size >= 6) {
-                                    val name = parts[0]
-                                    val preventTime = parts[5].toLongOrNull() ?: 0L
-                                    val wakeupCount = parts[6].toLongOrNull() ?: 0L
-                                    val expireCount = if (parts.size > 8) parts[8].toLongOrNull() ?: 0L else 0L
-                                    if (preventTime > 0 || wakeupCount > 0) {
-                                        list.add(WakelockInfo(name, preventTime, expireCount, wakeupCount))
-                                    }
+                    
+                    val lines = mutableListOf<String>()
+                    try {
+                        val file = File(path)
+                        if (file.exists() && file.canRead()) {
+                            lines.addAll(file.readLines())
+                        }
+                    } catch (e: Exception) {
+                        // Ignore and fall back to root shell below
+                    }
+                    
+                    if (lines.isEmpty() && RootController.isRootGranted.value && !RootController.dryRunMode.value) {
+                        val result = RootController.execute("cat $path", requestRoot = true)
+                        if (result.exitCode == 0 && result.stdout.isNotEmpty()) {
+                            lines.addAll(result.stdout)
+                        }
+                    }
+
+                    if (lines.size > 1) {
+                        lines.drop(1).forEach { line ->
+                            val parts = line.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+                            if (parts.size >= 6) {
+                                val name = parts[0]
+                                val preventTime = parts[5].toLongOrNull() ?: 0L
+                                val wakeupCount = parts[6].toLongOrNull() ?: 0L
+                                val expireCount = if (parts.size > 8) parts[8].toLongOrNull() ?: 0L else 0L
+                                if (preventTime > 0 || wakeupCount > 0) {
+                                    list.add(WakelockInfo(name, preventTime, expireCount, wakeupCount))
                                 }
                             }
-                            readSuccess = true
                         }
+                        readSuccess = true
                     }
 
                     if (!readSuccess) {
@@ -2268,5 +2300,14 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
             return result.stdout.firstOrNull()?.trim()
         }
         return null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Safety: Ensure battery charging is re-enabled and bypass charging is disabled when ViewModel is cleared
+        viewModelScope.launch(Dispatchers.IO) {
+            RootController.safeWritePath("/sys/class/power_supply/battery/charging_enabled", "1")
+            RootController.safeWritePath("/sys/class/power_supply/battery/input_suspend", "0")
+        }
     }
 }
