@@ -3,6 +3,7 @@ package com.example.root
 import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
@@ -102,20 +103,20 @@ object RootController {
     }
 
     private fun checkSuExecution(): Boolean {
-        var process: Process? = null
         return try {
-            process = Runtime.getRuntime().exec("su")
+            val process = ProcessBuilder("su")
+                .redirectErrorStream(true)
+                .start()
             val os = process.outputStream
             os.write("id\n".toByteArray(Charsets.UTF_8))
             os.write("exit\n".toByteArray(Charsets.UTF_8))
             os.flush()
+            os.close()
             val stdout = process.inputStream.bufferedReader().readLines()
             val exitCode = process.waitFor()
             exitCode == 0 && stdout.any { it.contains("uid=0") || it.contains("root") }
         } catch (e: Exception) {
             false
-        } finally {
-            process?.destroy()
         }
     }
 
@@ -140,10 +141,17 @@ object RootController {
                 os.write(("$command\n").toByteArray(Charsets.UTF_8))
                 os.write("exit\n".toByteArray(Charsets.UTF_8))
                 os.flush()
+                os.close()
 
-                val stdout = process.inputStream.bufferedReader().readLines()
-                val stderr = process.errorStream.bufferedReader().readLines()
+                val stdoutDeferred = async(Dispatchers.IO) {
+                    process.inputStream.bufferedReader().readLines()
+                }
+                val stderrDeferred = async(Dispatchers.IO) {
+                    process.errorStream.bufferedReader().readLines()
+                }
                 
+                val stdout = stdoutDeferred.await()
+                val stderr = stderrDeferred.await()
                 val exitCode = process.waitFor()
                 CommandResult(exitCode, stdout, stderr)
             } catch (e: Exception) {
@@ -158,11 +166,12 @@ object RootController {
      */
     private fun execSilent(cmd: String): CommandResult {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+            val process = ProcessBuilder("sh", "-c", cmd)
+                .redirectErrorStream(true)
+                .start()
             val stdout = process.inputStream.bufferedReader().readLines()
-            val stderr = process.errorStream.bufferedReader().readLines()
             val exitCode = process.waitFor()
-            CommandResult(exitCode, stdout, stderr)
+            CommandResult(exitCode, stdout, emptyList())
         } catch (e: Exception) {
             CommandResult(-1, emptyList(), listOf(e.localizedMessage ?: "Unknown check error"))
         }
